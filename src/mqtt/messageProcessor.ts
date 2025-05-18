@@ -11,7 +11,7 @@ const atmStrikeMap = new Map<string, number>();
 export function processMessage(
   topic: string,
   message: Buffer,
-  client: mqtt.Client
+  client: mqtt.MqttClient
 ) {
   try {
     // TODO: Implement this function

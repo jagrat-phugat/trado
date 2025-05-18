@@ -9,7 +9,7 @@ export const activeSubscriptions = new Set<string>();
 export const isFirstIndexMessage = new Map<string, boolean>();
 
 // Subscribe to all index topics
-export function subscribeToAllIndices(client: mqtt.Client) {
+export function subscribeToAllIndices(client: mqtt.MqttClient) {
   INDICES.forEach((indexName) => {
     const topic = `${config.app.indexPrefix}/${indexName}`;
     console.log(`Subscribing to index: ${topic}`);
@@ -27,7 +27,7 @@ export function initializeFirstMessageTracking() {
 
 // Subscribe to options around ATM strike
 export async function subscribeToAtmOptions(
-  client: mqtt.Client,
+  client: mqtt.MqttClient,
   indexName: string,
   atmStrike: number
 ) {

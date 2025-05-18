@@ -1,7 +1,7 @@
 import mqtt from "mqtt";
 import { config } from "../config";
 
-export function createClient(): mqtt.Client {
+export function createClient(): mqtt.MqttClient {
   // TODO: Implement this function
   // 1. Create MQTT client using configuration
   // 2. Return the client
