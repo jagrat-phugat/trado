@@ -1,6 +1,6 @@
-# Market Data Collector Hackathon
+# Market Data Collector
 
-Welcome to the Market Data Collector Hackathon! This project involves building a service that connects to an MQTT broker to subscribe to market data, process it, and store it in a TimescaleDB database.
+Welcome to the IIT Ropar Hackathon! This project involves building a service that connects to an MQTT broker to subscribe to market data, process it, and store it in a TimescaleDB database.
 
 ## Task Overview
 
