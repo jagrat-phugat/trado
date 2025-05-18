@@ -1,6 +1,8 @@
-# Market Data Collector
+# TRADO <> IIT Ropar Hackathon
 
-Welcome to the IIT Ropar Hackathon! This project involves building a service that connects to an MQTT broker to subscribe to market data, process it, and store it in a TimescaleDB database.
+Welcome to the Trado <> IIT Ropar Hackathon! This is the first part of a two part hackathon conducted by Trado, at IIT Ropar.
+
+This project involves building a service that connects to an MQTT broker to subscribe to market data, process it, and store it in a TimescaleDB database.
 
 ## Task Overview
 
