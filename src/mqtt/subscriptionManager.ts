@@ -2,13 +2,12 @@ import mqtt from "mqtt";
 import { config, INDICES, EXPIRY_DATES, STRIKE_RANGE } from "../config";
 import * as utils from "../utils";
 
-// Set of active subscriptions to avoid duplicates
+// Tracks all active subscriptions to avoid resubscription
 export const activeSubscriptions = new Set<string>();
 
-// Track if we've received the first message for each index
+// Tracks whether we've received the first message for each index
 export const isFirstIndexMessage = new Map<string, boolean>();
 
-// Subscribe to all index topics
 export function subscribeToAllIndices(client: mqtt.MqttClient) {
   INDICES.forEach((indexName) => {
     const topic = `${config.app.indexPrefix}/${indexName}`;
@@ -18,53 +17,72 @@ export function subscribeToAllIndices(client: mqtt.MqttClient) {
   });
 }
 
-// Initialize first message tracking
+// Initializes tracking map for first-time ATM subscriptions per index.
 export function initializeFirstMessageTracking() {
   INDICES.forEach((indexName) => {
     isFirstIndexMessage.set(indexName, true);
   });
 }
 
-// Subscribe to options around ATM strike
-export async function subscribeToAtmOptions(
+// Subscribes to CE and PE options around the ATM strike for a given index.
+export async function subscribeToOptionsForIndex(
   client: mqtt.MqttClient,
   indexName: string,
   atmStrike: number
 ) {
-  // TODO: Implement this function
-  // 1. Calculate strike prices around ATM
-  // 2. For each strike, get option tokens for CE and PE
-  // 3. Subscribe to corresponding topics
-
   console.log(`Subscribing to ${indexName} options around ATM ${atmStrike}`);
 
   const strikeDiff = utils.getStrikeDiff(indexName);
-  const strikes = [];
+  const expiryDate = EXPIRY_DATES[indexName as keyof typeof EXPIRY_DATES];
 
+  const strikes: number[] = [];
   for (let i = -STRIKE_RANGE; i <= STRIKE_RANGE; i++) {
     strikes.push(atmStrike + i * strikeDiff);
   }
 
-  // TODO: Subscribe to options
+  for (const strike of strikes) {
+    for (const optionType of ["ce", "pe"] as const) {
+      try {
+        const token = await getOptionToken(indexName, strike, optionType);
+        if (!token) continue;
+
+        const topic = utils.getOptionTopic(indexName, token);
+
+        if (!activeSubscriptions.has(topic)) {
+          client.subscribe(topic);
+          activeSubscriptions.add(topic);
+          console.log(`Subscribed to option: ${topic}`);
+        }
+      } catch (err) {
+        console.error(`Error subscribing to ${indexName} ${strike} ${optionType}:`, err);
+      }
+    }
+  }
 }
 
-// Fetch option token from API
+// Fetches the token number for a given option contract.
 export async function getOptionToken(
   indexName: string,
   strikePrice: number,
   optionType: "ce" | "pe"
 ): Promise<string | null> {
   try {
-    // TODO: Implement this function
-    // 1. Make API call to get token
-    // 2. Return the token
-
     const expiryDate = EXPIRY_DATES[indexName as keyof typeof EXPIRY_DATES];
     const url = `https://api.trado.trade/token?index=${indexName}&expiryDate=${expiryDate}&optionType=${optionType}&strikePrice=${strikePrice}`;
 
-    // TODO: Fetch from API and return token
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`API returned status ${res.status}`);
+    }
 
-    return null; // Placeholder
+    const data = await res.json();
+
+    if (data?.token) {
+      return data.token;
+    }
+
+    console.warn(`No token found in response for ${indexName} ${strikePrice} ${optionType}`);
+    return null;
   } catch (error) {
     console.error(
       `Error fetching token for ${indexName} ${strikePrice} ${optionType}:`,

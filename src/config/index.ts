@@ -1,3 +1,4 @@
+import mqtt from "mqtt/*";
 // Configuration for the application
 export const config = {
   mqtt: {
@@ -9,15 +10,15 @@ export const config = {
   },
   db: {
     host: process.env.PG_HOST || "localhost",
-    port: parseInt(process.env.PG_PORT || "5432"),
+    port: parseInt(process.env.PG_PORT || "5432", 10),
     user: process.env.PG_USER || "postgres",
     password: process.env.PG_PASSWORD || "postgres",
     database: process.env.PG_DATABASE || "market_data",
   },
   app: {
     indexPrefix: process.env.INDEX_PREFIX || "index",
-    batchSize: parseInt(process.env.BATCH_SIZE || "100"),
-    batchInterval: parseInt(process.env.BATCH_INTERVAL || "5000"), // 5 seconds
+    batchSize: parseInt(process.env.BATCH_SIZE || "100", 10),
+    batchInterval: parseInt(process.env.BATCH_INTERVAL || "5000", 10), // 5 seconds
   },
 };
 

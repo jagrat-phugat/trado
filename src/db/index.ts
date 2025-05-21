@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { config } from "../config";
 
-// Define a type for batch items
+// Type for incoming data
 export interface BatchItem {
   topic: string;
   ltp: number;
@@ -10,14 +10,15 @@ export interface BatchItem {
   strike?: number;
 }
 
-// Initialize database connection pool
+// PostgreSQL connection pool
 let pool: Pool;
 let dataBatch: BatchItem[] = [];
 let batchTimer: NodeJS.Timeout | null = null;
 
-// Cache topic IDs to avoid repeated lookups
+// Topic ID cache to reduce DB queries
 const topicCache = new Map<string, number>();
 
+// Create and return a DB connection pool
 export function createPool(): Pool {
   return new Pool({
     host: config.db.host,
@@ -28,28 +29,48 @@ export function createPool(): Pool {
   });
 }
 
+// Initialize the DB connection
 export function initialize(dbPool: Pool) {
   pool = dbPool;
   console.log("Database initialized");
-
-  // TODO: Preload topic cache from database
 }
 
+// Fetch or insert topic ID (with cache)
 export async function getTopicId(
   topicName: string,
   indexName?: string,
   type?: string,
   strike?: number
 ): Promise<number> {
-  // TODO: Implement this function
-  // 1. Check if topic exists in cache
-  // 2. If not in cache, check if it exists in database
-  // 3. If not in database, insert it
-  // 4. Return topic_id
+  if (topicCache.has(topicName)) {
+    return topicCache.get(topicName)!;
+  }
 
-  return 0; // Placeholder
+  // Try fetching from database
+  const selectRes = await pool.query(
+    `SELECT topic_id FROM topics WHERE topic_name = $1`,
+    [topicName]
+  );
+
+  if (selectRes?.rowCount && selectRes.rowCount > 0) {
+    const id = selectRes.rows[0].topic_id;
+    topicCache.set(topicName, id);
+    return id;
+  }
+
+  // Insert new topic and return its ID
+  const insertRes = await pool.query(
+    `INSERT INTO topics (topic_name, index_name, type, strike)
+     VALUES ($1, $2, $3, $4) RETURNING topic_id`,
+    [topicName, indexName, type, strike]
+  );
+
+  const newId = insertRes.rows[0].topic_id;
+  topicCache.set(topicName, newId);
+  return newId;
 }
 
+// Queue data for batch insert
 export function saveToDatabase(
   topic: string,
   ltp: number,
@@ -57,35 +78,84 @@ export function saveToDatabase(
   type?: string,
   strike?: number
 ) {
-  // TODO: Implement this function
-  // 1. Add item to batch
-  // 2. If batch timer is not running, start it
-  // 3. If batch size reaches threshold, flush batch
+  dataBatch.push({ topic, ltp, indexName, type, strike });
 
-  console.log(`Saving to database: ${topic}, LTP: ${ltp}`);
+  if (!batchTimer) {
+    batchTimer = setTimeout(() => flushBatch(), config.app.batchInterval);
+  }
+
+  if (dataBatch.length >= config.app.batchSize) {
+    flushBatch();
+  }
 }
 
+// Flush batch to database
 export async function flushBatch() {
-  // TODO: Implement this function
-  // 1. Clear timer
-  // 2. If batch is empty, return
-  // 3. Process batch items (get topic IDs)
-  // 4. Insert data in a transaction
-  // 5. Reset batch
+  if (batchTimer) {
+    clearTimeout(batchTimer);
+    batchTimer = null;
+  }
 
-  console.log("Flushing batch to database");
+  if (dataBatch.length === 0) return;
+
+  console.log(`Flushing ${dataBatch.length} items to DB...`);
+
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const topicIdMap = new Map<string, number>();
+
+      // Resolve all topic IDs
+      for (const item of dataBatch) {
+        if (!topicIdMap.has(item.topic)) {
+          const id = await getTopicId(item.topic, item.indexName, item.type, item.strike);
+          topicIdMap.set(item.topic, id);
+        }
+      }
+
+      // Prepare batched insert
+      const insertValues: string[] = [];
+      const insertParams: any[] = [];
+
+      dataBatch.forEach((item, idx) => {
+        const paramIdx = idx * 2;
+        const topicId = topicIdMap.get(item.topic)!;
+
+        insertValues.push(`($${paramIdx + 1}, $${paramIdx + 2})`);
+        insertParams.push(topicId, item.ltp);
+      });
+
+      await client.query(
+        `INSERT INTO ltp_data (topic_id, ltp) VALUES ${insertValues.join(", ")}`,
+        insertParams
+      );
+
+      await client.query("COMMIT");
+      console.log("Batch inserted successfully.");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("Error during batch insert:", err);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("DB Connection error during flush:", err);
+  } finally {
+    dataBatch = [];
+  }
 }
 
+// Graceful shutdown and flush
 export async function cleanupDatabase() {
-  // Flush any remaining items in the batch
   if (dataBatch.length > 0) {
     await flushBatch();
   }
 
-  // Close the database pool
   if (pool) {
     await pool.end();
   }
 
-  console.log("Database cleanup completed");
+  console.log("Database cleanup completed.");
 }
